@@ -1,31 +1,28 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
+type Mode = 'signin' | 'signup'
+
 export function LoginPage() {
+  const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim()) return
+    if (!email.trim() || !password) return
     setLoading(true)
     setError('')
 
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
-    })
+    const { error: err } =
+      mode === 'signin'
+        ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
+        : await supabase.auth.signUp({ email: email.trim(), password })
 
     setLoading(false)
-    if (err) {
-      setError(err.message)
-    } else {
-      setSent(true)
-    }
+    if (err) setError(err.message)
   }
 
   return (
@@ -43,50 +40,55 @@ export function LoginPage() {
         </div>
 
         <div className="rounded-2xl border border-surface-border bg-surface-muted p-6 shadow-xl">
-          {sent ? (
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
-                <svg className="h-6 w-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h2 className="text-base font-semibold text-white">Check your email</h2>
-              <p className="mt-2 text-sm text-gray-400">
-                We sent a magic link to <strong className="text-gray-300">{email}</strong>.
-                Click it to sign in.
-              </p>
-              <button
-                onClick={() => { setSent(false); setEmail('') }}
-                className="mt-4 text-sm text-amber-400 hover:text-amber-300"
-              >
-                Use a different email
-              </button>
-            </div>
-          ) : (
-            <>
-              <h2 className="mb-1 text-sm font-semibold text-white">Sign in with email</h2>
-              <p className="mb-4 text-xs text-gray-500">No password needed — we'll send a link.</p>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <input
-                  type="email"
-                  className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoFocus
-                  required
-                />
-                {error && <p className="text-xs text-red-400">{error}</p>}
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-surface transition-colors hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50"
-                >
-                  {loading ? 'Sending…' : 'Send magic link'}
-                </button>
-              </form>
-            </>
-          )}
+          <h2 className="mb-1 text-sm font-semibold text-white">
+            {mode === 'signin' ? 'Sign in' : 'Create account'}
+          </h2>
+          <p className="mb-4 text-xs text-gray-500">
+            {mode === 'signin' ? 'Welcome back.' : 'Set up your Datum account.'}
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="email"
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoFocus
+              required
+            />
+            <input
+              type="password"
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+
+            {error && <p className="text-xs text-red-400">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-surface transition-colors hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50"
+            >
+              {loading
+                ? mode === 'signin' ? 'Signing in…' : 'Creating account…'
+                : mode === 'signin' ? 'Sign in' : 'Create account'}
+            </button>
+          </form>
+
+          <p className="mt-4 text-center text-xs text-gray-500">
+            {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+            <button
+              onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError('') }}
+              className="text-amber-400 hover:text-amber-300"
+            >
+              {mode === 'signin' ? 'Sign up' : 'Sign in'}
+            </button>
+          </p>
         </div>
       </div>
     </div>
