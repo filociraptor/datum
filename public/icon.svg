@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1d1d1b"/>
+  <!-- D letterform -->
+  <rect x="144" y="128" width="52" height="256" rx="8" fill="#f59e0b"/>
+  <path d="M196 128 h72 a128 128 0 0 1 0 256 h-72 z" fill="#f59e0b"/>
+  <rect x="196" y="172" width="56" height="168" rx="6" fill="#1d1d1b"/>
+  <!-- Engineering grid dots -->
+  <circle cx="380" cy="148" r="6" fill="#f59e0b" opacity="0.4"/>
+  <circle cx="380" cy="180" r="6" fill="#f59e0b" opacity="0.4"/>
+  <circle cx="348" cy="148" r="6" fill="#f59e0b" opacity="0.4"/>
+</svg>
