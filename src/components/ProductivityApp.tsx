@@ -3,6 +3,7 @@ import {
   Plus, Settings, ChevronRight, ChevronDown, ChevronLeft,
   Mail, Phone, FileText, ExternalLink, Inbox, Check,
   Pause, MoreHorizontal, Clock, Sunrise, RotateCw, LogOut,
+  ArrowUpDown,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -17,7 +18,6 @@ const addDays = (n: number, base: Date = TODAY): Date => {
   return d
 }
 
-// Dark-mode due-date pill tones
 const DAY_TIERS = {
   overdue:  { bg: '#3A1010', fg: '#F87171', dot: '#EF4444' },
   today:    { bg: '#3A1010', fg: '#F87171', dot: '#EF4444' },
@@ -32,6 +32,7 @@ type DayTierKey = keyof typeof DAY_TIERS
 type SwipeAction = 'tomorrow' | 'monday' | 'someday'
 type ViewTab = 'today' | 'upcoming' | 'projects'
 type PlanChoice = 'today' | 'tomorrow' | 'monday' | 'someday'
+type SortBy = 'date' | 'project'
 
 interface ProjectLink { label: string; kind: string; url: string }
 interface Project {
@@ -96,6 +97,28 @@ function fmtEstimate(min: number | null) {
   return `${(min / 60).toFixed(1)}h`
 }
 
+// Date ↔ <input type="date"> value
+const toInputDate = (d: Date | null): string => {
+  if (!d) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+const fromInputDate = (s: string): Date | null => {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// Parse "30m" / "1.5h" / "90" → minutes
+function parseEstimate(s: string): number | null {
+  const match = s.trim().match(/^(\d+(?:\.\d+)?)\s*(m|h)?$/i)
+  if (!match) return null
+  const n = parseFloat(match[1])
+  return match[2]?.toLowerCase() === 'h' ? Math.round(n * 60) : Math.round(n)
+}
+
 const WEEKDAYS_SHORT = ['sun','mon','tue','wed','thu','fri','sat']
 const WEEKDAYS_LONG  = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
 
@@ -135,8 +158,8 @@ function parseQuickEntry(text: string, projects: Project[]): ParsedEntry {
       continue
     }
 
-    if (lower === 'today')   { dueDate = new Date(TODAY); tokens.push({ type: 'date', text: word, value: dueDate }); continue }
-    if (lower === 'tomorrow') { dueDate = addDays(1);     tokens.push({ type: 'date', text: word, value: dueDate }); continue }
+    if (lower === 'today')    { dueDate = new Date(TODAY); tokens.push({ type: 'date', text: word, value: dueDate }); continue }
+    if (lower === 'tomorrow') { dueDate = addDays(1);      tokens.push({ type: 'date', text: word, value: dueDate }); continue }
     if (lower === 'next' && words[i + 1]?.toLowerCase() === 'week') {
       dueDate = addDays(7); tokens.push({ type: 'date', text: 'next week', value: dueDate }); i++; continue
     }
@@ -177,18 +200,111 @@ const CONTACTS: Contact[] = [
 ]
 
 const INITIAL_TASKS: Task[] = [
-  { id: 't1', projectId: 'p1', title: 'Mark up final plat — sheet C-3.0', dueDate: addDays(0),  estimateMin: 60,   bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: TODAY,      notes: '244-lot review',    done: false },
-  { id: 't2', projectId: 'p3', title: 'Plan check return — Patewood',     dueDate: addDays(0),  estimateMin: 30,   bumpCount: 3, waitingOn: null, nudgeOn: null,       planFor: TODAY,      notes: '',                  done: false },
+  { id: 't1', projectId: 'p1', title: 'Mark up final plat — sheet C-3.0', dueDate: addDays(0),  estimateMin: 60,   bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: TODAY,      notes: '244-lot review',     done: false },
+  { id: 't2', projectId: 'p3', title: 'Plan check return — Patewood',     dueDate: addDays(0),  estimateMin: 30,   bumpCount: 3, waitingOn: null, nudgeOn: null,       planFor: TODAY,      notes: '',                   done: false },
   { id: 't3', projectId: 'p6', title: 'Schedule hydrant flow test',       dueDate: addDays(0),  estimateMin: 120,  bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: TODAY,      notes: 'before loop design', done: false },
-  { id: 't4', projectId: 'p6', title: 'City stagnation memo response',    dueDate: addDays(4),  estimateMin: 90,   bumpCount: 0, waitingOn: 'c5', nudgeOn: addDays(2), planFor: null,       notes: '',                  done: false },
-  { id: 't5', projectId: 'p1', title: 'Email Joe re: ROW dedication',     dueDate: addDays(1),  estimateMin: 30,   bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: addDays(1), notes: 'from Outlook',      done: false },
-  { id: 't6', projectId: 'p5', title: 'Geotech kickoff prep',             dueDate: addDays(5),  estimateMin: 90,   bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: 'NDA on file',       done: false },
-  { id: 't7', projectId: 'p4', title: 'Permit re-submission',             dueDate: addDays(3),  estimateMin: 120,  bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: '',                  done: false },
-  { id: 't8', projectId: 'p2', title: 'Alternate vendor research',        dueDate: null,        estimateMin: null, bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: 'someday',           done: false },
-  { id: 't9', projectId: 'p3', title: 'Old Patewood quote follow-up',     dueDate: null,        estimateMin: null, bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: '',                  done: false },
+  { id: 't4', projectId: 'p6', title: 'City stagnation memo response',    dueDate: addDays(4),  estimateMin: 90,   bumpCount: 0, waitingOn: 'c5', nudgeOn: addDays(2), planFor: null,       notes: '',                   done: false },
+  { id: 't5', projectId: 'p1', title: 'Email Joe re: ROW dedication',     dueDate: addDays(1),  estimateMin: 30,   bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: addDays(1), notes: 'from Outlook',       done: false },
+  { id: 't6', projectId: 'p5', title: 'Geotech kickoff prep',             dueDate: addDays(5),  estimateMin: 90,   bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: 'NDA on file',        done: false },
+  { id: 't7', projectId: 'p4', title: 'Permit re-submission',             dueDate: addDays(3),  estimateMin: 120,  bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: '',                   done: false },
+  { id: 't8', projectId: 'p2', title: 'Alternate vendor research',        dueDate: null,        estimateMin: null, bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: 'someday',            done: false },
+  { id: 't9', projectId: 'p3', title: 'Old Patewood quote follow-up',     dueDate: null,        estimateMin: null, bumpCount: 0, waitingOn: null, nudgeOn: null,       planFor: null,       notes: '',                   done: false },
 ]
 
 const DAILY_CAPACITY_HRS = 8
+
+// ─── Edit task bottom sheet ────────────────────────────────────
+
+function EditTaskSheet({ task, projects, onSave, onClose }: {
+  task: Task
+  projects: Project[]
+  onSave: (t: Task) => void
+  onClose: () => void
+}) {
+  const [dueDate,     setDueDate]     = useState(toInputDate(task.dueDate))
+  const [estimateStr, setEstimateStr] = useState(fmtEstimate(task.estimateMin))
+  const [projectId,   setProjectId]   = useState(task.projectId)
+
+  const save = () => {
+    onSave({
+      ...task,
+      dueDate:     fromInputDate(dueDate),
+      planFor:     fromInputDate(dueDate), // keep planFor in sync with due
+      estimateMin: parseEstimate(estimateStr),
+      projectId,
+    })
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[#222220] rounded-t-2xl border-t border-[#3a3a38] pb-safe">
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 rounded-full bg-[#3a3a38]" />
+        </div>
+
+        {/* Task title */}
+        <div className="px-5 pb-3 border-b border-[#2a2a28]">
+          <p className="text-[13px] font-medium text-[#e0ddd8] leading-snug">{task.title}</p>
+        </div>
+
+        <div className="px-5 pt-4 pb-6 space-y-4">
+          {/* Due date */}
+          <div>
+            <label className="block text-[10.5px] font-medium uppercase tracking-wider text-[#888480] mb-1.5">
+              Due date
+            </label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={e => setDueDate(e.target.value)}
+              className="w-full bg-[#2a2a28] text-[#e0ddd8] rounded-lg px-3 py-2.5 text-[13px] border border-[#3a3a38] focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20 [color-scheme:dark]"
+            />
+          </div>
+
+          {/* Effort */}
+          <div>
+            <label className="block text-[10.5px] font-medium uppercase tracking-wider text-[#888480] mb-1.5">
+              Effort
+            </label>
+            <input
+              type="text"
+              value={estimateStr}
+              onChange={e => setEstimateStr(e.target.value)}
+              placeholder="e.g. 30m or 1.5h"
+              className="w-full bg-[#2a2a28] text-[#e0ddd8] rounded-lg px-3 py-2.5 text-[13px] border border-[#3a3a38] focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20 placeholder:text-[#444240]"
+            />
+          </div>
+
+          {/* Project */}
+          <div>
+            <label className="block text-[10.5px] font-medium uppercase tracking-wider text-[#888480] mb-1.5">
+              Project
+            </label>
+            <select
+              value={projectId}
+              onChange={e => setProjectId(e.target.value)}
+              className="w-full bg-[#2a2a28] text-[#e0ddd8] rounded-lg px-3 py-2.5 text-[13px] border border-[#3a3a38] focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20 [color-scheme:dark]"
+            >
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={save}
+            className="w-full py-2.5 rounded-xl bg-amber-500 text-[#1d1d1b] text-[13px] font-semibold hover:bg-amber-600 active:bg-amber-700 transition-colors"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── Shared components ────────────────────────────────────────
 
@@ -210,10 +326,11 @@ function DueDatePill({ date, paused, bumpCount }: { date: Date | null; paused?: 
   )
 }
 
-function TaskRow({ task, project, onToggle, onSwipeAction, showProject = false }: {
+function TaskRow({ task, project, onToggle, onSwipeAction, onEdit, showProject = false }: {
   task: Task; project: Project | undefined
   onToggle: (id: string) => void
   onSwipeAction: (id: string, action: SwipeAction) => void
+  onEdit: (t: Task) => void
   showProject?: boolean
 }) {
   const [swiped, setSwiped] = useState(false)
@@ -231,6 +348,7 @@ function TaskRow({ task, project, onToggle, onSwipeAction, showProject = false }
         className={`relative transition-all duration-200 px-4 py-2.5 flex items-start gap-3 ${isWaiting ? 'bg-[#222220]' : 'bg-[#1d1d1b] hover:bg-[#222220]'}`}
         style={{ transform: swiped ? 'translateX(-180px)' : 'translateX(0)', zIndex: 1 }}
       >
+        {/* Checkbox */}
         <button
           onClick={() => onToggle(task.id)}
           className="mt-0.5 w-4 h-4 rounded-full border border-[#555250] hover:border-[#888480] flex items-center justify-center flex-shrink-0 transition-colors"
@@ -239,7 +357,11 @@ function TaskRow({ task, project, onToggle, onSwipeAction, showProject = false }
           {task.done && <Check size={9} color="#1d1d1b" strokeWidth={3} />}
         </button>
 
-        <div className="flex-1 min-w-0">
+        {/* Tappable content area — opens edit sheet */}
+        <button
+          onClick={() => onEdit(task)}
+          className="flex-1 min-w-0 text-left"
+        >
           <div className={`text-[13px] leading-snug ${task.done ? 'line-through text-[#555250]' : isWaiting ? 'text-[#888480]' : 'text-[#e0ddd8]'}`}>
             {task.title}
           </div>
@@ -261,7 +383,7 @@ function TaskRow({ task, project, onToggle, onSwipeAction, showProject = false }
               bumped {task.bumpCount}× — break it down or drop?
             </div>
           )}
-        </div>
+        </button>
 
         <button onClick={() => setSwiped(s => !s)} className="text-[#444240] hover:text-[#888480] flex-shrink-0 mt-0.5 transition-colors">
           <MoreHorizontal size={14} />
@@ -296,11 +418,13 @@ function CapacityBar({ minutesPlanned }: { minutesPlanned: number }) {
   )
 }
 
-function TodayView({ tasks, projects, onToggle, onSwipeAction }: {
+function TodayView({ tasks, projects, onToggle, onSwipeAction, onEdit }: {
   tasks: Task[]; projects: Project[]
-  onToggle: (id: string) => void; onSwipeAction: (id: string, a: SwipeAction) => void
+  onToggle: (id: string) => void
+  onSwipeAction: (id: string, a: SwipeAction) => void
+  onEdit: (t: Task) => void
 }) {
-  const bucket = tasks.filter(t => !t.done && (sameDay(t.planFor, TODAY) || (t.dueDate && t.dueDate < TODAY && !sameDay(t.dueDate, TODAY))))
+  const bucket  = tasks.filter(t => !t.done && (sameDay(t.planFor, TODAY) || (t.dueDate && t.dueDate < TODAY && !sameDay(t.dueDate, TODAY))))
   const active  = bucket.filter(t => !t.waitingOn)
   const waiting = bucket.filter(t => t.waitingOn)
   const minutesPlanned = active.reduce((s, t) => s + (t.estimateMin ?? 0), 0)
@@ -310,45 +434,110 @@ function TodayView({ tasks, projects, onToggle, onSwipeAction }: {
       {bucket.length === 0
         ? <div className="px-4 py-12 text-center text-[13px] text-[#555250]">Nothing on the plan for today.</div>
         : <>
-            {active.map(t => <TaskRow key={t.id} task={t} project={projects.find(p => p.id === t.projectId)} onToggle={onToggle} onSwipeAction={onSwipeAction} showProject />)}
+            {active.map(t => <TaskRow key={t.id} task={t} project={projects.find(p => p.id === t.projectId)} onToggle={onToggle} onSwipeAction={onSwipeAction} onEdit={onEdit} showProject />)}
             {waiting.length > 0 && <>
               <div className="px-4 pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-wider text-[#555250]">Waiting on others</div>
-              {waiting.map(t => <TaskRow key={t.id} task={t} project={projects.find(p => p.id === t.projectId)} onToggle={onToggle} onSwipeAction={onSwipeAction} showProject />)}
+              {waiting.map(t => <TaskRow key={t.id} task={t} project={projects.find(p => p.id === t.projectId)} onToggle={onToggle} onSwipeAction={onSwipeAction} onEdit={onEdit} showProject />)}
             </>}
           </>}
     </div>
   )
 }
 
-function UpcomingView({ tasks, projects, onToggle, onSwipeAction }: {
+function UpcomingView({ tasks, projects, onToggle, onSwipeAction, onEdit }: {
   tasks: Task[]; projects: Project[]
-  onToggle: (id: string) => void; onSwipeAction: (id: string, a: SwipeAction) => void
+  onToggle: (id: string) => void
+  onSwipeAction: (id: string, a: SwipeAction) => void
+  onEdit: (t: Task) => void
 }) {
-  const upcoming = tasks.filter(t => !t.done && t.dueDate && t.dueDate >= TODAY).sort((a, b) => a.dueDate!.getTime() - b.dueDate!.getTime())
-  const groups = upcoming.reduce<Record<string, { date: Date; tasks: Task[] }>>((acc, t) => {
+  const [sortBy, setSortBy] = useState<SortBy>('date')
+
+  const upcoming = tasks
+    .filter(t => !t.done && t.dueDate && t.dueDate >= TODAY)
+    .sort((a, b) => a.dueDate!.getTime() - b.dueDate!.getTime())
+
+  if (upcoming.length === 0) {
+    return <div className="px-4 py-12 text-center text-[13px] text-[#555250]">Nothing scheduled.</div>
+  }
+
+  // Sort toggle bar
+  const SortBar = (
+    <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a28] bg-[#1d1d1b]">
+      <span className="text-[10.5px] font-medium uppercase tracking-wider text-[#555250]">
+        {upcoming.length} task{upcoming.length !== 1 ? 's' : ''}
+      </span>
+      <button
+        onClick={() => setSortBy(s => s === 'date' ? 'project' : 'date')}
+        className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+          sortBy === 'project'
+            ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
+            : 'border-[#3a3a38] text-[#888480] hover:text-[#b8b4ac] hover:bg-[#2a2a28]'
+        }`}
+      >
+        <ArrowUpDown size={11} />
+        {sortBy === 'date' ? 'By date' : 'By project'}
+      </button>
+    </div>
+  )
+
+  if (sortBy === 'project') {
+    // Group by project
+    const grouped = upcoming.reduce<Record<string, { project: Project | undefined; tasks: Task[] }>>((acc, t) => {
+      const key = t.projectId
+      if (!acc[key]) acc[key] = { project: projects.find(p => p.id === key), tasks: [] }
+      acc[key].tasks.push(t)
+      return acc
+    }, {})
+    const groups = Object.values(grouped).sort((a, b) =>
+      (a.project?.name ?? '').localeCompare(b.project?.name ?? '')
+    )
+    return (
+      <div>
+        {SortBar}
+        {groups.map(g => (
+          <div key={g.project?.id ?? 'none'}>
+            <div className="px-4 pt-3 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-[#555250]">
+              {g.project?.name ?? 'No project'}
+            </div>
+            {g.tasks.map(t => (
+              <TaskRow key={t.id} task={t} project={g.project} onToggle={onToggle} onSwipeAction={onSwipeAction} onEdit={onEdit} />
+            ))}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // Default: group by date
+  const byDate = upcoming.reduce<Record<string, { date: Date; tasks: Task[] }>>((acc, t) => {
     const key = t.dueDate!.toDateString()
     if (!acc[key]) acc[key] = { date: t.dueDate!, tasks: [] }
     acc[key].tasks.push(t)
     return acc
   }, {})
-  const days = Object.values(groups)
-  if (days.length === 0) return <div className="px-4 py-12 text-center text-[13px] text-[#555250]">Nothing scheduled.</div>
+  const days = Object.values(byDate)
+
   return (
     <div>
+      {SortBar}
       {days.map(g => (
         <div key={g.date.toDateString()}>
           <div className="px-4 pt-3 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-[#555250]">{fmtFullDate(g.date)}</div>
-          {g.tasks.map(t => <TaskRow key={t.id} task={t} project={projects.find(p => p.id === t.projectId)} onToggle={onToggle} onSwipeAction={onSwipeAction} showProject />)}
+          {g.tasks.map(t => (
+            <TaskRow key={t.id} task={t} project={projects.find(p => p.id === t.projectId)} onToggle={onToggle} onSwipeAction={onSwipeAction} onEdit={onEdit} showProject />
+          ))}
         </div>
       ))}
     </div>
   )
 }
 
-function ProjectsView({ projects, tasks, expanded, toggleExpanded, onSelectProject, onToggle, onSwipeAction }: {
+function ProjectsView({ projects, tasks, expanded, toggleExpanded, onSelectProject, onToggle, onSwipeAction, onEdit }: {
   projects: Project[]; tasks: Task[]; expanded: Set<string>
   toggleExpanded: (id: string) => void; onSelectProject: (id: string) => void
-  onToggle: (id: string) => void; onSwipeAction: (id: string, a: SwipeAction) => void
+  onToggle: (id: string) => void
+  onSwipeAction: (id: string, a: SwipeAction) => void
+  onEdit: (t: Task) => void
 }) {
   return (
     <div>
@@ -369,7 +558,9 @@ function ProjectsView({ projects, tasks, expanded, toggleExpanded, onSelectProje
                 <span className="text-[11px] text-[#555250]">{projTasks.length}</span>
               </button>
             </div>
-            {isOpen && projTasks.map(t => <TaskRow key={t.id} task={t} project={p} onToggle={onToggle} onSwipeAction={onSwipeAction} />)}
+            {isOpen && projTasks.map(t => (
+              <TaskRow key={t.id} task={t} project={p} onToggle={onToggle} onSwipeAction={onSwipeAction} onEdit={onEdit} />
+            ))}
           </div>
         )
       })}
@@ -377,9 +568,11 @@ function ProjectsView({ projects, tasks, expanded, toggleExpanded, onSelectProje
   )
 }
 
-function ProjectDetailView({ project, tasks, contact, onToggle, onSwipeAction }: {
+function ProjectDetailView({ project, tasks, contact, onToggle, onSwipeAction, onEdit }: {
   project: Project; tasks: Task[]; contact: Contact | undefined
-  onToggle: (id: string) => void; onSwipeAction: (id: string, a: SwipeAction) => void
+  onToggle: (id: string) => void
+  onSwipeAction: (id: string, a: SwipeAction) => void
+  onEdit: (t: Task) => void
 }) {
   const projTasks = tasks.filter(t => t.projectId === project.id && !t.done)
   return (
@@ -428,7 +621,9 @@ function ProjectDetailView({ project, tasks, contact, onToggle, onSwipeAction }:
       </div>
       {projTasks.length === 0
         ? <div className="px-4 py-6 text-center text-[12px] text-[#555250]">No open tasks.</div>
-        : projTasks.map(t => <TaskRow key={t.id} task={t} project={project} onToggle={onToggle} onSwipeAction={onSwipeAction} />)}
+        : projTasks.map(t => (
+            <TaskRow key={t.id} task={t} project={project} onToggle={onToggle} onSwipeAction={onSwipeAction} onEdit={onEdit} />
+          ))}
     </div>
   )
 }
@@ -565,7 +760,6 @@ function QuickEntry({ projects, onCommit }: { projects: Project[]; onCommit: (p:
         placeholder="Type a task…  #project  tomorrow  ~30m"
         className="w-full bg-[#2a2a28] hover:bg-[#333331] focus:bg-[#333331] focus:outline-none focus:ring-1 focus:ring-[#555250] rounded-md px-3 py-2 text-[13px] text-[#e0ddd8] placeholder:text-[#444240] transition-colors"
       />
-
       {text.trim().length > 0 && (
         <div className="mt-2 flex items-center gap-1.5 flex-wrap px-1">
           {parsed.tokens.map((t, i) => {
@@ -575,7 +769,6 @@ function QuickEntry({ projects, onCommit }: { projects: Project[]; onCommit: (p:
           })}
         </div>
       )}
-
       {showPreview && (
         <div className="mt-2 flex items-start gap-2.5 px-2.5 py-2 bg-[#222220] rounded-md border border-[#333331]">
           <div className="flex-1 min-w-0">
@@ -602,9 +795,13 @@ export function ProductivityApp() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [expanded, setExpanded]               = useState<Set<string>>(new Set(['p1', 'p6']))
   const [showRitual, setShowRitual]           = useState(true)
+  const [editingTask, setEditingTask]         = useState<Task | null>(null)
 
   const toggleTask = (id: string) =>
     setTasks(ts => ts.map(t => t.id === id ? { ...t, done: !t.done } : t))
+
+  const saveEditedTask = (updated: Task) =>
+    setTasks(ts => ts.map(t => t.id === updated.id ? updated : t))
 
   const toggleExpanded = (id: string) =>
     setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -665,7 +862,6 @@ export function ProductivityApp() {
     >
       {/* ── Top navigation bar ── */}
       <header className="flex-shrink-0 border-b border-[#2a2a28]">
-        {/* Brand + actions row */}
         <div className="flex items-center justify-between px-4 py-2.5">
           <div className="flex items-center gap-2.5">
             {activeProject ? (
@@ -707,7 +903,6 @@ export function ProductivityApp() {
           </div>
         </div>
 
-        {/* Tab strip — hidden during ritual or project detail */}
         {!showRitual && !activeProject && (
           <div className="flex gap-1 px-3 pb-2">
             {TABS.map(t => (
@@ -723,32 +918,39 @@ export function ProductivityApp() {
         )}
       </header>
 
-      {/* ── Quick entry (below header, above scroll area) ── */}
       {!showRitual && !activeProject && (
         <QuickEntry projects={projects} onCommit={commitTask} />
       )}
 
-      {/* ── Scrollable content ── */}
       <main className="flex-1 overflow-y-auto overscroll-contain">
         {showRitual ? (
           <DailyPlanRitual tasks={tasks} projects={projects} onResolve={resolveRitual} onSkip={() => setShowRitual(false)} />
         ) : activeProject ? (
-          <ProjectDetailView project={activeProject} tasks={tasks} contact={activeContact} onToggle={toggleTask} onSwipeAction={handleSwipeAction} />
+          <ProjectDetailView project={activeProject} tasks={tasks} contact={activeContact} onToggle={toggleTask} onSwipeAction={handleSwipeAction} onEdit={setEditingTask} />
         ) : (
           <>
-            {view === 'today'    && <TodayView    tasks={tasks} projects={projects} onToggle={toggleTask} onSwipeAction={handleSwipeAction} />}
-            {view === 'upcoming' && <UpcomingView tasks={tasks} projects={projects} onToggle={toggleTask} onSwipeAction={handleSwipeAction} />}
-            {view === 'projects' && <ProjectsView projects={projects} tasks={tasks} expanded={expanded} toggleExpanded={toggleExpanded} onSelectProject={setActiveProjectId} onToggle={toggleTask} onSwipeAction={handleSwipeAction} />}
+            {view === 'today'    && <TodayView    tasks={tasks} projects={projects} onToggle={toggleTask} onSwipeAction={handleSwipeAction} onEdit={setEditingTask} />}
+            {view === 'upcoming' && <UpcomingView tasks={tasks} projects={projects} onToggle={toggleTask} onSwipeAction={handleSwipeAction} onEdit={setEditingTask} />}
+            {view === 'projects' && <ProjectsView projects={projects} tasks={tasks} expanded={expanded} toggleExpanded={toggleExpanded} onSelectProject={setActiveProjectId} onToggle={toggleTask} onSwipeAction={handleSwipeAction} onEdit={setEditingTask} />}
           </>
         )}
       </main>
 
-      {/* ── Footer inbox strip ── */}
       {!showRitual && !activeProject && (
         <footer className="flex-shrink-0 px-3 py-2.5 border-t border-[#2a2a28] flex items-center justify-center gap-2 text-[11px] text-[#444240] hover:bg-[#222220] hover:text-[#888480] transition-colors cursor-pointer">
           <Inbox size={12} />
           <span>Drop email here to add task</span>
         </footer>
+      )}
+
+      {/* ── Edit task bottom sheet ── */}
+      {editingTask && (
+        <EditTaskSheet
+          task={editingTask}
+          projects={projects}
+          onSave={saveEditedTask}
+          onClose={() => setEditingTask(null)}
+        />
       )}
     </div>
   )

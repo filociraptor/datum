@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)",
+      "Bash(git -C /Users/cfilo/datum status)",
+      "Bash(git -C /Users/cfilo/datum log --oneline -5)",
+      "Bash(git -C /Users/cfilo/datum branch)",
+      "Bash(git -C /Users/cfilo/datum add src/App.tsx src/main.tsx src/components/ProductivityApp.tsx)",
+      "Bash(git -C /Users/cfilo/datum commit -m ' *)",
+      "Bash(git -C /Users/cfilo/datum stash)",
+      "Bash(git -C /Users/cfilo/datum rebase origin/main)",
+      "Bash(git -C /Users/cfilo/datum stash pop)",
+      "Bash(git -C /Users/cfilo/datum push --force-with-lease)",
+      "Bash(git -C /Users/cfilo/datum stash drop)"
     ]
   }
 }
